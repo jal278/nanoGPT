@@ -2,6 +2,7 @@ import numpy as np
 import pickle
 
 vocab_size = 23916
+vocab_size = 23913
 out_dict = {'vocab_size':vocab_size}
 
 #a = np.fromfile("val.bin")
