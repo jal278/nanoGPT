@@ -202,7 +202,24 @@ class GPT(nn.Module):
         for block in self.transformer.h:
             if hasattr(block.attn, 'bias'):
                 block.attn.bias = block.attn.bias[:,:,:block_size,:block_size]
+    
+    def crop_vocab_size(self, vocab_size):
+        # model surgery to decrease the block size if necessary
+        # e.g. we may load the GPT2 pretrained model checkpoint (block size 1024)
+        # but want to use a smaller block size for some smaller, simpler model
+        assert vocab_size <= self.config.vocab_size
+        self.config.vocab_size = vocab_size
+        self.transformer.wte.weight = nn.Parameter(self.transformer.wte.weight[:vocab_size])
+        #for block in self.transformer.h:
+        #    if hasattr(block.attn, 'bias'):
+        #        block.attn.bias = block.attn.bias[:,:,:block_size,:block_size]
 
+    def reset_vocab(self):
+        config = self.config
+        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
+        self.transformer.wte.weight = self.lm_head.weight
+        self._init_weights(self.transformer.wte)
+        
     @classmethod
     def from_pretrained(cls, model_type, override_args=None):
         assert model_type in {'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}

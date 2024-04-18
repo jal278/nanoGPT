@@ -37,6 +37,7 @@ if init_from == 'resume':
     ckpt_path = os.path.join(out_dir, 'ckpt.pt')
     checkpoint = torch.load(ckpt_path, map_location=device)
     gptconf = GPTConfig(**checkpoint['model_args'])
+    print(checkpoint['model_args'])
     model = GPT(gptconf)
     state_dict = checkpoint['model']
     unwanted_prefix = '_orig_mod.'

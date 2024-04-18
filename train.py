@@ -32,6 +32,8 @@ from model import GPTConfig, GPT
 # -----------------------------------------------------------------------------
 # default config values designed to train a gpt2 (124M) on OpenWebText
 # I/O
+
+reset_vocab=False
 out_dir = 'out'
 eval_interval = 2000
 log_interval = 1
@@ -209,6 +211,10 @@ elif init_from.startswith('gpt2'):
 if block_size < model.config.block_size:
     model.crop_block_size(block_size)
     model_args['block_size'] = block_size # so that the checkpoint will have the right value
+if reset_vocab:
+    print("resetting vocab")
+    model.reset_vocab()
+
 model.to(device)
 
 # initialize a GradScaler. If enabled=False scaler is a no-op
