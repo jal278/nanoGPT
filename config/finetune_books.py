@@ -1,9 +1,14 @@
 import time
+log_interval = 10 # don't print too too often
 
+# we expect to overfit on this small dataset, so only save when val improves
+always_save_checkpoint = False
+
+wandb_log = True # override via command line if you like
 out_dir = 'out_book_gpt2'
 eval_interval = 100
 eval_iters = 10
-wandb_log = False # feel free to turn on
+
 wandb_project = 'shakespeare'
 wandb_run_name = 'ft1-' + str(time.time())
 
