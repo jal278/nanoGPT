@@ -27,7 +27,8 @@ import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 
-from model import GPTConfig, GPT
+#from model import GPTConfig, GPT
+from model_embs import GPTConfig, GPT
 
 # -----------------------------------------------------------------------------
 # default config values designed to train a gpt2 (124M) on OpenWebText
@@ -214,6 +215,12 @@ if block_size < model.config.block_size:
 if reset_vocab:
     print("resetting vocab")
     model.reset_vocab()
+
+freeze=False
+if freeze:
+    model.apply(lambda x: x.requires_grad_(False)) # in case we are finetuning, we don't want to backprop through the model
+    model.transformer.wte.requires_grad_(True) # except for the position embeddings
+    model.lm_head.requires_grad_(True) # and the final classifier
 
 model.to(device)
 
