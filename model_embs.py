@@ -140,21 +140,33 @@ class GPT(nn.Module):
         self.config = config
 
         self.precomputed_embeddings = nn.Embedding.from_pretrained(torch.tensor(precomputed_embeddings),freeze=True)
+
         self.embedding_addition = nn.Linear(sz,config.n_embd)
+        #self.embedding_addition1 = nn.Linear(sz,512)
+        #self.embedding_addition2 = nn.Linear(512,config.n_embd)
+        #self.embedding_addition3 = nn.Linear(sz,512)
+        #self.embedding_addition4 = nn.Linear(512,config.n_embd)
 
         self.transformer = nn.ModuleDict(dict(
             wte = nn.Embedding(config.vocab_size, config.n_embd),
             wpe = nn.Embedding(config.block_size, config.n_embd),
             drop = nn.Dropout(config.dropout),
             h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
+            h1 = Block(config),
+            h2 = Block(config),
             ln_f = LayerNorm(config.n_embd, bias=config.bias),
+            ln2_f = LayerNorm(config.n_embd, bias=config.bias),
+            ln3_f = LayerNorm(config.n_embd, bias=config.bias),
         ))
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
+        #self.lm_head2 = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         # with weight tying when using torch.compile() some warnings get generated:
         # "UserWarning: functional_call was passed multiple values for tied weights.
         # This behavior is deprecated and will be an error in future versions"
         # not 100% sure what this is, so far seems to be harmless. TODO investigate
+
         self.transformer.wte.weight = self.lm_head.weight # https://paperswithcode.com/method/weight-tying
+
         # init all weights
         self.apply(self._init_weights)
         # apply special scaled init to the residual projections, per GPT-2 paper
@@ -186,18 +198,19 @@ class GPT(nn.Module):
             if module is not self.precomputed_embeddings:
                 torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, idx, targets=None):
+    def forward(self, idx, targets=None,targets1=None,targets2=None):
         device = idx.device
         b, t = idx.size()
         assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
         pos = torch.arange(0, t, dtype=torch.long, device=device) # shape (t)
 
         if do_precompute:
-            tok_add = F.relu(self.embedding_addition(self.precomputed_embeddings(idx)))
+            tok_add = F.gelu(self.embedding_addition(self.precomputed_embeddings(idx)))
+            #tok_add = F.gelu(self.embedding_addition2(F.gelu(self.embedding_addition1(self.precomputed_embeddings(idx)))))
 
             # also calculate precomputed embeddings for all token embeddings
-            tok_add_all = F.relu(self.embedding_addition(self.precomputed_embeddings.weight))
-
+            tok_add_all = F.gelu(self.embedding_addition(self.precomputed_embeddings.weight))
+            #tok_add_all = F.gelu(self.embedding_addition4(F.gelu(self.embedding_addition3(self.precomputed_embeddings.weight))))
             # forward the GPT model itself
         tok_emb = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)
 
@@ -208,14 +221,27 @@ class GPT(nn.Module):
         x = self.transformer.drop(tok_emb + pos_emb)
         for block in self.transformer.h:
             x = block(x)
+        
+        x_path2 = self.transformer.h1(x)
+        x_path2 = self.transformer.ln2_f(x_path2)
+
+        x_path3 = self.transformer.h2(x)
+        x_path3 = self.transformer.ln3_f(x_path3)
+
         x = self.transformer.ln_f(x)
 
         if targets is not None:
             # if we are given some desired targets also calculate the loss
             logits = self.lm_head(x)
+            logits2 = self.lm_head(x_path2)
+            logits3 = self.lm_head(x_path3)
             if do_precompute:
                 logits += F.linear(x, tok_add_all)
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
+            if targets1 is not None:
+                loss += 0.25 * F.cross_entropy(logits2.view(-1, logits2.size(-1)), targets1.view(-1), ignore_index=-1)
+            if targets2 is not None:
+                loss += 0.25 * F.cross_entropy(logits3.view(-1, logits3.size(-1)), targets2.view(-1), ignore_index=-1)
         else:
             # inference-time mini-optimization: only forward the lm_head on the very last position
             logits = self.lm_head(x[:, [-1], :]) # note: using list [-1] to preserve the time dim
