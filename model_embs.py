@@ -22,8 +22,9 @@ from pdb import set_trace as bb
 #load in numpy array of weird embedding shit stuff
 # file is 'desc_embeddings.npy'
 
-precomputed_embeddings = np.load('desc_embeddings.npy')
-precomputed_embeddings = np.resize(precomputed_embeddings,(23936,1024))
+sz=3072
+precomputed_embeddings = np.load('desc_embeddings_3072.npy')
+precomputed_embeddings = np.resize(precomputed_embeddings,(23936,sz))
 print(precomputed_embeddings.shape)
 do_precompute=True
 
@@ -139,7 +140,7 @@ class GPT(nn.Module):
         self.config = config
 
         self.precomputed_embeddings = nn.Embedding.from_pretrained(torch.tensor(precomputed_embeddings),freeze=True)
-        self.embedding_addition = nn.Linear(1024,config.n_embd)
+        self.embedding_addition = nn.Linear(sz,config.n_embd)
 
         self.transformer = nn.ModuleDict(dict(
             wte = nn.Embedding(config.vocab_size, config.n_embd),
