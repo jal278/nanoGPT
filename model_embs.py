@@ -31,6 +31,7 @@ do_precompute=True
 #23936
 #extend 
 
+af = F.silu
 class LayerNorm(nn.Module):
     """ LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False """
 
@@ -198,7 +199,7 @@ class GPT(nn.Module):
             if module is not self.precomputed_embeddings:
                 torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, idx, targets=None,targets1=None,targets2=None):
+    def forward(self, idx, targets=None,targets1=None,targets2=None,pct=None):
         device = idx.device
         b, t = idx.size()
         assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
@@ -219,13 +220,16 @@ class GPT(nn.Module):
 
         pos_emb = self.transformer.wpe(pos) # position embeddings of shape (t, n_embd)
         x = self.transformer.drop(tok_emb + pos_emb)
-        for block in self.transformer.h:
+        for idx,block in enumerate(self.transformer.h):
+            x_prev = x
             x = block(x)
         
-        x_path2 = self.transformer.h1(x)
-        x_path2 = self.transformer.ln2_f(x_path2)
+        x_prev = x
 
-        x_path3 = self.transformer.h2(x)
+        _x_path2 = self.transformer.h1(x_prev)
+        x_path2 = self.transformer.ln2_f(_x_path2)
+
+        x_path3 = self.transformer.h2(x_prev)
         x_path3 = self.transformer.ln3_f(x_path3)
 
         x = self.transformer.ln_f(x)
@@ -237,11 +241,14 @@ class GPT(nn.Module):
             logits3 = self.lm_head(x_path3)
             if do_precompute:
                 logits += F.linear(x, tok_add_all)
+            # label
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
+            if pct is None:
+                pct = 0.25
             if targets1 is not None:
-                loss += 0.25 * F.cross_entropy(logits2.view(-1, logits2.size(-1)), targets1.view(-1), ignore_index=-1)
+                loss += 0.5 * pct * F.cross_entropy(logits2.view(-1, logits2.size(-1)), targets1.view(-1), ignore_index=-1) #was 0.25
             if targets2 is not None:
-                loss += 0.25 * F.cross_entropy(logits3.view(-1, logits3.size(-1)), targets2.view(-1), ignore_index=-1)
+                loss += 0.5 * pct * F.cross_entropy(logits3.view(-1, logits3.size(-1)), targets2.view(-1), ignore_index=-1) #was 0.25
         else:
             # inference-time mini-optimization: only forward the lm_head on the very last position
             logits = self.lm_head(x[:, [-1], :]) # note: using list [-1] to preserve the time dim
