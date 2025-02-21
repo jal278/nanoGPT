@@ -26,7 +26,7 @@ sz=3072
 precomputed_embeddings = np.load('desc_embeddings_3072.npy')
 precomputed_embeddings = np.resize(precomputed_embeddings,(23936,sz))
 print(precomputed_embeddings.shape)
-do_precompute=True
+do_precompute=False
 
 #23936
 #extend 
@@ -139,8 +139,11 @@ class GPT(nn.Module):
         assert config.vocab_size is not None
         assert config.block_size is not None
         self.config = config
-
-        self.precomputed_embeddings = nn.Embedding.from_pretrained(torch.tensor(precomputed_embeddings),freeze=True)
+        
+        if do_precompute:
+            self.precomputed_embeddings = nn.Embedding.from_pretrained(torch.tensor(precomputed_embeddings),freeze=True)
+        else:
+            self.precomputed_embeddings = 1921387128
 
         self.embedding_addition = nn.Linear(sz,config.n_embd)
         #self.embedding_addition1 = nn.Linear(sz,512)
